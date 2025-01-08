@@ -35,6 +35,8 @@ def download_monthly_klines(trading_type, symbols, num_symbols, intervals, years
   print("Found {} symbols".format(num_symbols))
 
   for symbol in symbols:
+    if args.suffix and not symbol.endswith(args.suffix):
+          continue
     print("[{}/{}] - start download monthly {} klines ".format(current+1, num_symbols, symbol))
     for interval in intervals:
       for year in years:
@@ -74,6 +76,8 @@ def download_daily_klines(trading_type, symbols, num_symbols, intervals, dates, 
   print("Found {} symbols".format(num_symbols))
 
   for symbol in symbols:
+    if args.suffix and not symbol.endswith(args.suffix):
+          continue
     print("[{}/{}] - start download daily {} klines ".format(current+1, num_symbols, symbol))
     for interval in intervals:
       for date in dates:
@@ -92,6 +96,7 @@ def download_daily_klines(trading_type, symbols, num_symbols, intervals, dates, 
 
 if __name__ == "__main__":
     parser = get_parser('klines')
+    parser.add_argument('--suffix', help='Only process symbols with this suffix')
     args = parser.parse_args(sys.argv[1:])
 
     if not args.symbols:
