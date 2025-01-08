@@ -8,6 +8,8 @@
 
 """
 import sys
+import os
+import json
 from datetime import *
 import pandas as pd
 from enums import *
@@ -15,9 +17,22 @@ from utility import download_file, get_all_symbols, get_parser, get_start_end_da
   get_path
 
 
-def download_monthly_klines(trading_type, symbols, num_symbols, intervals, years, months, start_date, end_date, folder, checksum):
+def load_progress(progress_file):
+  try:
+    with open(progress_file, 'r') as f:
+      return json.load(f)
+  except FileNotFoundError:
+    return {}
+
+def save_progress(progress_file, progress):
+  with open(progress_file, 'w') as f:
+    json.dump(progress, f)
+
+def download_monthly_klines(trading_type, symbols, num_symbols, intervals, years, months, start_date, end_date, folder, checksum, force=False):
   current = 0
   date_range = None
+  progress_file = os.path.join(folder or os.environ.get('STORE_DIRECTORY', '.'), 'download_progress.json')
+  progress = load_progress(progress_file)
 
   if start_date and end_date:
     date_range = start_date + " " + end_date
@@ -45,18 +60,31 @@ def download_monthly_klines(trading_type, symbols, num_symbols, intervals, years
           if current_date >= start_date and current_date <= end_date:
             path = get_path(trading_type, "klines", "monthly", symbol, interval)
             file_name = "{}-{}-{}-{}.zip".format(symbol.upper(), interval, year, '{:02d}'.format(month))
+            
+            # Check progress
+            progress_key = f"{symbol}_{interval}_{year}_{month:02d}"
+            if not force and progress.get(progress_key, False):
+              print(f"Skipping already downloaded file: {file_name}")
+              continue
+            
             download_file(path, file_name, date_range, folder)
+            progress[progress_key] = True
+            save_progress(progress_file, progress)
 
             if checksum == 1:
               checksum_path = get_path(trading_type, "klines", "monthly", symbol, interval)
               checksum_file_name = "{}-{}-{}-{}.zip.CHECKSUM".format(symbol.upper(), interval, year, '{:02d}'.format(month))
               download_file(checksum_path, checksum_file_name, date_range, folder)
+              progress[f"{progress_key}_checksum"] = True
+              save_progress(progress_file, progress)
 
     current += 1
 
-def download_daily_klines(trading_type, symbols, num_symbols, intervals, dates, start_date, end_date, folder, checksum):
+def download_daily_klines(trading_type, symbols, num_symbols, intervals, dates, start_date, end_date, folder, checksum, force=False):
   current = 0
   date_range = None
+  progress_file = os.path.join(folder or os.environ.get('STORE_DIRECTORY', '.'), 'download_progress.json')
+  progress = load_progress(progress_file)
 
   if start_date and end_date:
     date_range = start_date + " " + end_date
@@ -85,18 +113,31 @@ def download_daily_klines(trading_type, symbols, num_symbols, intervals, dates, 
         if current_date >= start_date and current_date <= end_date:
           path = get_path(trading_type, "klines", "daily", symbol, interval)
           file_name = "{}-{}-{}.zip".format(symbol.upper(), interval, date)
+          
+          # Check progress
+          progress_key = f"{symbol}_{interval}_{date}"
+          if not force and progress.get(progress_key, False):
+            print(f"Skipping already downloaded file: {file_name}")
+            continue
+          
           download_file(path, file_name, date_range, folder)
+          progress[progress_key] = True
+          save_progress(progress_file, progress)
 
           if checksum == 1:
             checksum_path = get_path(trading_type, "klines", "daily", symbol, interval)
             checksum_file_name = "{}-{}-{}.zip.CHECKSUM".format(symbol.upper(), interval, date)
             download_file(checksum_path, checksum_file_name, date_range, folder)
+            progress[f"{progress_key}_checksum"] = True
+            save_progress(progress_file, progress)
 
     current += 1
 
 if __name__ == "__main__":
     parser = get_parser('klines')
     parser.add_argument('--suffix', help='Only process symbols with this suffix')
+    parser.add_argument('--resume', action='store_true', help='Resume from last download progress')
+    parser.add_argument('--force', action='store_true', help='Force re-download existing files')
     args = parser.parse_args(sys.argv[1:])
 
     if not args.symbols:
@@ -115,7 +156,7 @@ if __name__ == "__main__":
       dates = pd.date_range(end=datetime.today(), periods=period.days + 1).to_pydatetime().tolist()
       dates = [date.strftime("%Y-%m-%d") for date in dates]
       if args.skip_monthly == 0:
-        download_monthly_klines(args.type, symbols, num_symbols, args.intervals, args.years, args.months, args.startDate, args.endDate, args.folder, args.checksum)
+        download_monthly_klines(args.type, symbols, num_symbols, args.intervals, args.years, args.months, args.startDate, args.endDate, args.folder, args.checksum, args.force)
     if args.skip_daily == 0:
-      download_daily_klines(args.type, symbols, num_symbols, args.intervals, dates, args.startDate, args.endDate, args.folder, args.checksum)
+      download_daily_klines(args.type, symbols, num_symbols, args.intervals, dates, args.startDate, args.endDate, args.folder, args.checksum, args.force)
 
