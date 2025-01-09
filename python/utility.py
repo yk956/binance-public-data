@@ -76,7 +76,7 @@ def download_file(base_path, file_name, date_range=None, folder=None):
     except urllib.error.HTTPError:
       print("\nFile not found: {}".format(download_url))
       return
-    except urllib.error.URLError as e:
+    except urllib.error.Error as e:
       retry_count += 1
       if retry_count < max_retries:
         print(f"\nNetwork error occurred ({e}), retrying in 60 seconds... (attempt {retry_count}/{max_retries})")
