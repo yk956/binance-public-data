@@ -19,8 +19,7 @@ logger = logging.getLogger(__name__)
 import json
 from datetime import datetime
 
-CACHE_FILE = Path('data/pairs_cache.json')
-DOWNLOAD_DIR = Path('data/binance')
+# DOWNLOAD_DIR = Path('data/binance')
 TRADING_TYPE = ['spot','um', 'cm']
 ARCHIVE_TYPE = ['daily', 'monthly']
 INTERVALS = ["1s", "1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1mo"]
@@ -40,12 +39,6 @@ def get_prefix(trading_type, archive_type) -> str:
 
 def get_trading_pairs(trading_type) -> Set[str]:
     """Get trading pairs using S3 delimiter and caching with pagination"""
-    # if CACHE_FILE.exists():
-    #     cache_data = json.loads(CACHE_FILE.read_text())
-    #     cache_time = datetime.fromisoformat(cache_data['timestamp'])
-    #     if (datetime.now() - cache_time).days < 1:
-    #         logger.info(f"Using cached pairs list ({len(cache_data['pairs'])} pairs)")
-    #         return set(cache_data['pairs'])
 
     if not trading_type in TRADING_TYPE:
         logger.error(f"Trading type {trading_type} not supported")
@@ -85,8 +78,6 @@ def get_trading_pairs(trading_type) -> Set[str]:
             'timestamp': datetime.now().isoformat(),
             'pairs': list(pairs)
         }
-        CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        CACHE_FILE.write_text(json.dumps(cache_data))
 
         logger.info(f"Found and cached {len(pairs)} trading pairs")
         return pairs
@@ -131,7 +122,8 @@ def download_klines(
     pair: str, 
     interval: str,
     start_date: str,  # Format: YYYY-MM-DD
-    end_date: str     # Format: YYYY-MM-DD
+    end_date: str,     # Format: YYYY-MM-DD
+    download_dir: str
 ) -> bool:
     """Download kline data for specific pair and interval"""
 
@@ -159,7 +151,11 @@ def download_klines(
         )
 
         # Create save directory
-        save_dir = DOWNLOAD_DIR / trading_type / archive_type / pair / interval
+        download_dir_path = Path(download_dir)
+        if trading_type == 'spot':
+            save_dir = download_dir_path / trading_type / archive_type / pair / interval
+        else:
+            save_dir = download_dir_path / 'futures' / trading_type / archive_type / pair / interval
         save_dir.mkdir(parents=True, exist_ok=True)
 
         # List available files
@@ -183,7 +179,7 @@ def download_klines(
                 # Download file
                 save_path = save_dir / file_name
                 if save_path.exists():
-                    logger.debug(f"File exists, skipping: {file_name}")
+                    logger.info(f"File exists, skipping: {file_name}")
                     continue
                     
                 logger.info(f"Downloading {file_name}")
@@ -200,30 +196,6 @@ def download_klines(
         logger.error(f"Error downloading {pair} {interval}: {e}")
         return False
 
-# def main():
-
-#     # Download configuration
-#     trading_type = 'spot'
-#     archive_type = 'monthly'
-#     intervals = ['5m']  # Add more intervals as needed
-#     start_date = '2020-01-01'
-#     end_date = '2020-02-10'
-#     pairs = ['BTCUSDT',]
-
-#     if archive_type == 'monthly':
-#         start_date = start_date[:7] + '-01'
-#         end_date = end_date[:7] + '-01'
-
-#     if pairs is None or len(pairs) == 0:
-#         all_pairs = get_trading_pairs(trading_type)
-#         pairs = filter_usdt_pairs(all_pairs)
-#         print(pairs, len(pairs))
-
-#     # Download data
-#     print(pairs)
-#     for pair in pairs:
-#         for interval in intervals:
-#             download_klines(trading_type, archive_type, pair, interval, start_date, end_date)
 
 def parse_arguments():
     """Parse command line arguments"""
@@ -235,14 +207,14 @@ def parse_arguments():
     parser.add_argument('--end_date', type=str, required=True, help='End date (format: YYYY-MM-DD)')
     # parser.add_argument('--pairs', type=str, nargs='+', required=True, help='List of trading pairs')
     parser.add_argument('--pairs', type=str, nargs='+', default=None, help='List of trading pairs (default: None)')
+    parser.add_argument('--download_dir', type=str, default='data/binance', help='Directory to save downloaded data (default: data/binance)')
     return parser.parse_args()
 
 def main():
     # Parse command line arguments
     args = parse_arguments()
 
-    # Create download directory
-    DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
     
     # Configuration from arguments
     trading_type = args.trading_type
@@ -251,9 +223,12 @@ def main():
     start_date = args.start_date
     end_date = args.end_date
     pairs = args.pairs
+    download_dir = args.download_dir
 
-    print(intervals)
-    print(pairs)
+    logger.info(f"download_dir: {download_dir}")
+
+    # Create download directory
+    Path(download_dir).mkdir(parents=True, exist_ok=True)
 
     if archive_type == 'monthly':
         start_date = start_date[:7] + '-01'
@@ -262,13 +237,15 @@ def main():
     if pairs is None or len(pairs) == 0:
         all_pairs = get_trading_pairs(trading_type)
         pairs = filter_usdt_pairs(all_pairs)
-        print(pairs, len(pairs))
+        # print(pairs, len(pairs))
+
+    logger.info(f"Downloading {archive_type} data for {len(pairs)} pairs")
+    logger.info(f"pairs: {pairs}")
 
     # Download data for each pair and interval
-    print(pairs)
     for pair in pairs:
         for interval in intervals:
-            download_klines(trading_type, archive_type, pair, interval, start_date, end_date)
+            download_klines(trading_type, archive_type, pair, interval, start_date, end_date, download_dir)
 
 
 if __name__ == '__main__':
