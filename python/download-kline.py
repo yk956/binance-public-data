@@ -10,7 +10,8 @@
 import sys
 import os
 import json
-from datetime import *
+import http.client
+from datetime import datetime
 import pandas as pd
 from enums import *
 from utility import download_file, get_all_symbols, get_parser, get_start_end_date_objects, convert_to_date_object, \
@@ -67,16 +68,28 @@ def download_monthly_klines(trading_type, symbols, num_symbols, intervals, years
               print(f"Skipping already downloaded file: {file_name}")
               continue
             
-            download_file(path, file_name, date_range, folder)
-            progress[progress_key] = True
-            save_progress(progress_file, progress)
+            while True:
+                try:
+                    download_file(path, file_name, date_range, folder)
+                    progress[progress_key] = True
+                    save_progress(progress_file, progress)
+                    break
+                except http.client.RemoteDisconnected:
+                    print(f"Connection lost while downloading {file_name}, retrying...")
+                    continue
 
             if checksum == 1:
               checksum_path = get_path(trading_type, "klines", "monthly", symbol, interval)
               checksum_file_name = "{}-{}-{}-{}.zip.CHECKSUM".format(symbol.upper(), interval, year, '{:02d}'.format(month))
-              download_file(checksum_path, checksum_file_name, date_range, folder)
-              progress[f"{progress_key}_checksum"] = True
-              save_progress(progress_file, progress)
+              while True:
+                  try:
+                      download_file(checksum_path, checksum_file_name, date_range, folder)
+                      progress[f"{progress_key}_checksum"] = True
+                      save_progress(progress_file, progress)
+                      break
+                  except http.client.RemoteDisconnected:
+                      print(f"Connection lost while downloading {checksum_file_name}, retrying...")
+                      continue
 
     current += 1
 
@@ -120,16 +133,28 @@ def download_daily_klines(trading_type, symbols, num_symbols, intervals, dates, 
             print(f"Skipping already downloaded file: {file_name}")
             continue
           
-          download_file(path, file_name, date_range, folder)
-          progress[progress_key] = True
-          save_progress(progress_file, progress)
+          while True:
+              try:
+                  download_file(path, file_name, date_range, folder)
+                  progress[progress_key] = True
+                  save_progress(progress_file, progress)
+                  break
+              except http.client.RemoteDisconnected:
+                  print(f"Connection lost while downloading {file_name}, retrying...")
+                  continue
 
           if checksum == 1:
             checksum_path = get_path(trading_type, "klines", "daily", symbol, interval)
             checksum_file_name = "{}-{}-{}.zip.CHECKSUM".format(symbol.upper(), interval, date)
-            download_file(checksum_path, checksum_file_name, date_range, folder)
-            progress[f"{progress_key}_checksum"] = True
-            save_progress(progress_file, progress)
+            while True:
+                try:
+                    download_file(checksum_path, checksum_file_name, date_range, folder)
+                    progress[f"{progress_key}_checksum"] = True
+                    save_progress(progress_file, progress)
+                    break
+                except http.client.RemoteDisconnected:
+                    print(f"Connection lost while downloading {checksum_file_name}, retrying...")
+                    continue
 
     current += 1
 

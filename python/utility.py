@@ -1,7 +1,7 @@
-import os, sys, re, shutil
+import os, sys, re, shutil, time
 import json
 from pathlib import Path
-from datetime import *
+from datetime import date, datetime
 import urllib.request
 from argparse import ArgumentParser, RawTextHelpFormatter, ArgumentTypeError
 from enums import *
@@ -30,12 +30,8 @@ def download_file(base_path, file_name, date_range=None, folder=None):
   download_path = "{}{}".format(base_path, file_name)
   if folder:
     base_path = os.path.join(folder, base_path)
-  #if date_range:
-  #  date_range = date_range.replace(" ","_")
-  #  base_path = os.path.join(base_path, date_range)
   save_path = get_destination_dir(os.path.join(base_path, file_name), folder)
   
-
   if os.path.exists(save_path):
     print("\nfile already exists! {}".format(save_path))
     return
@@ -44,30 +40,50 @@ def download_file(base_path, file_name, date_range=None, folder=None):
   if not os.path.exists(base_path):
     Path(get_destination_dir(base_path)).mkdir(parents=True, exist_ok=True)
 
-  try:
-    download_url = get_download_url(download_path)
-    dl_file = urllib.request.urlopen(download_url)
-    length = dl_file.getheader('content-length')
-    if length:
-      length = int(length)
-      blocksize = max(4096,length//100)
+  max_retries = 10
+  retry_count = 0
+  download_url = get_download_url(download_path)
 
-    with open(save_path, 'wb') as out_file:
-      dl_progress = 0
-      print("\nFile Download: {}".format(save_path))
-      while True:
-        buf = dl_file.read(blocksize)   
-        if not buf:
-          break
-        dl_progress += len(buf)
-        out_file.write(buf)
-        done = int(50 * dl_progress / length)
-        sys.stdout.write("\r[%s%s]" % ('#' * done, '.' * (50-done)) )    
-        sys.stdout.flush()
+  while retry_count < max_retries:
+    try:
+      dl_file = urllib.request.urlopen(download_url)
+      length = dl_file.getheader('content-length')
+      if length:
+        length = int(length)
+        blocksize = max(4096,length//100)
 
-  except urllib.error.HTTPError:
-    print("\nFile not found: {}".format(download_url))
-    pass
+      with open(save_path, 'wb') as out_file:
+        dl_progress = 0
+        print("\nFile Download: {}".format(save_path))
+        while True:
+          try:
+            buf = dl_file.read(blocksize)
+            if not buf:
+              break
+            dl_progress += len(buf)
+            out_file.write(buf)
+            done = int(50 * dl_progress / length)
+            sys.stdout.write("\r[%s%s]" % ('#' * done, '.' * (50-done)) )
+            sys.stdout.flush()
+          except urllib.error.URLError:
+            print("\nNetwork error occurred, retrying...")
+            time.sleep(60)
+            continue
+
+      # Download completed successfully
+      return
+
+    except urllib.error.HTTPError:
+      print("\nFile not found: {}".format(download_url))
+      return
+    except urllib.error.URLError as e:
+      retry_count += 1
+      if retry_count < max_retries:
+        print(f"\nNetwork error occurred ({e}), retrying in 60 seconds... (attempt {retry_count}/{max_retries})")
+        time.sleep(60)
+      else:
+        print(f"\nFailed to download after {max_retries} attempts: {download_url}")
+        return
 
 def convert_to_date_object(d):
   year, month, day = [int(x) for x in d.split('-')]
