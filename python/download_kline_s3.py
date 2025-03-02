@@ -243,10 +243,14 @@ def main():
     logger.info(f"pairs: {pairs}")
 
     # Download data for each pair and interval
+    cnt = 1
     for pair in pairs:
         for interval in intervals:
             download_klines(trading_type, archive_type, pair, interval, start_date, end_date, download_dir)
+            logger.info(f"Pairs {cnt}/{len(pairs)}: Downloaded {pair} {interval}")
+        cnt += 1
 
 
 if __name__ == '__main__':
     main()
+
